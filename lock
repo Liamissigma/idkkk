@@ -1,0 +1,57 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Config = require(script:WaitForChild("TargetConfig"))
+
+-- Create FOV Circle (Drawing API alternative: simple Frame UI circle)
+local ScreenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+local Circle = Instance.new("Frame", ScreenGui)
+
+Circle.Size = UDim2.fromOffset(Config.Fov * 2, Config.Fov * 2)
+Circle.AnchorPoint = Vector2.new(0.5, 0.5)
+Circle.Position = UDim2.fromScale(0.5, 0.5)
+Circle.BackgroundTransparency = 0.7
+Circle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+
+local UICorner = Instance.new("UICorner", Circle)
+UICorner.CornerRadius = UDim.new(1, 0)
+
+-- Utility: Get closest target inside FOV
+local function getClosestTarget()
+	local closest
+	local shortestDistance = Config.Fov
+	
+	for _, player in pairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(Config.TargetPart) then
+			local part = player.Character[Config.TargetPart]
+			
+			local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+			if onScreen then
+				local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+				local distance = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+				
+				if distance < shortestDistance then
+					shortestDistance = distance
+					closest = part
+				end
+			end
+		end
+	end
+	
+	return closest
+end
+
+-- Smooth camera tracking (educational)
+RunService.RenderStepped:Connect(function()
+	if not Config.Lock then return end
+	
+	local target = getClosestTarget()
+	if target then
+		local currentCF = Camera.CFrame
+		local targetCF = CFrame.new(currentCF.Position, target.Position)
+		
+		Camera.CFrame = currentCF:Lerp(targetCF, Config.Smoothness)
+	end
+end)
