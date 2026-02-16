@@ -1,0 +1,99 @@
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local FOV_RADIUS = 150 
+local SMOOTH_TURN = true 
+local SMOOTHNESS = 0
+local TARGET_PART_NAME = "Head" 
+local WALL_CHECK = true 
+
+local function setupGui()
+    local existing = LocalPlayer.PlayerGui:FindFirstChild("FOVScreenGui")
+    if existing then existing:Destroy() end
+
+    local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+    screenGui.Name = "FOVScreenGui"
+    screenGui.ResetOnSpawn = false 
+
+    local circle = Instance.new("Frame", screenGui)
+    circle.Size = UDim2.new(0, FOV_RADIUS * 2, 0, FOV_RADIUS * 2)
+    circle.AnchorPoint = Vector2.new(0.5, 0.5)
+    circle.Position = UDim2.new(0.5, 0, 0.5, 0)
+    circle.BackgroundTransparency = 1
+
+    local uiStroke = Instance.new("UIStroke", circle)
+    uiStroke.Thickness = 2
+    uiStroke.Color = Color3.fromRGB(0, 255, 255)
+    
+    local uiCorner = Instance.new("UICorner", circle)
+    uiCorner.CornerRadius = UDim.new(1, 0)
+end
+
+setupGui()
+
+local function isVisible(targetPart)
+    if not WALL_CHECK then return true end
+    
+    local char = LocalPlayer.Character
+    if not char then return false end
+    
+    local rayParams = RaycastParams.new()
+    
+    rayParams.FilterDescendantsInstances = {char, targetPart.Parent, Camera}
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+    local startPos = Camera.CFrame.Position
+    local direction = targetPart.Position - startPos
+    local result = workspace:Raycast(startPos, direction, rayParams)
+
+    if not result then
+        return true
+    end
+    return false
+end
+
+local function getClosestPlayerInFOV()
+    local nearest = nil
+    local minDistance = FOV_RADIUS
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            local targetPart = player.Character:FindFirstChild(TARGET_PART_NAME)
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            
+            if targetPart and root and humanoid and humanoid.Health > 0 then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                
+                if onScreen then
+                    local mouseDistance = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                    
+                    if mouseDistance < minDistance then
+                        if isVisible(targetPart) then
+                            minDistance = mouseDistance
+                            nearest = targetPart
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+RunService:BindToRenderStep("CameraLock", Enum.RenderPriority.Camera.Value + 1, function()
+    Camera = workspace.CurrentCamera
+    
+    local target = getClosestPlayerInFOV()
+    if target then
+        local lookAtCFrame = CFrame.new(Camera.CFrame.Position, target.Position)
+        if SMOOTH_TURN then
+            Camera.CFrame = Camera.CFrame:Lerp(lookAtCFrame, SMOOTHNESS)
+        else
+            Camera.CFrame = lookAtCFrame
+        end
+    end
+end)
